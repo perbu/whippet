@@ -13,7 +13,9 @@ import (
 	"math/rand/v2"
 	"net"
 	"os"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -53,24 +55,75 @@ func Test_Complete(t *testing.T) {
 	in := bytes.NewBufferString("ping")
 
 	// then run the application
-	err := run(ctx, logs, out, in, []string{"-server", "localhost:1881", "-topic", "foo", "-response-topic", "foo/resp", "-clientID", "client-1", "-timeout", "60s"}, nil)
+	err := run(ctx, logs, out, in, []string{"-server", "localhost:1881", "-topic", "foo", "-response-topic", "foo/resp", "-clientID", "client-1", "-timeout", "1s"}, nil)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if out.String() != "pong" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
+}
 
+func TestGetConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    config
+		wantErr bool
+	}{
+		{
+			name: "Valid config",
+			args: []string{"-server", "mqtt://example.com", "-topic", "testTopic", "-response-topic", "responseTopic", "-qos", "2", "-retained", "-clientID", "client-123", "-username", "user", "-password", "pass"},
+			want: config{
+				server:      "mqtt://example.com",
+				mdnsName:    "",
+				publishTo:   "testTopic",
+				subscribeTo: "responseTopic",
+				qos:         2,
+				retained:    true,
+				clientID:    "client-123", // Assume generateClientID returns "client-123" for this test
+				username:    "user",
+				password:    "pass",
+				timeout:     10 * time.Second,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "Missing topic",
+			args:    []string{"-server", "mqtt://example.com"},
+			want:    config{},
+			wantErr: true,
+		},
+		{
+			name:    "Negative timeout",
+			args:    []string{"-server", "mqtt://example.com", "-topic", "testTopic", "-timeout", "-5s"},
+			want:    config{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getConfig(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getConfig() = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
 }
 
 // runEchoer is a simple echoer that listens for a message on the topic "foo" and responds with "pong" on the response topic.
 // The response topic is taken from the incoming message's properties.
 func runEchoer(ctx context.Context, logger *slog.Logger) error {
 	config := config{
-		server:        "localhost:1881",
-		responseTopic: "foo",
-		qos:           1,
-		clientID:      fmt.Sprintf("echoer-%d", rand.IntN(1000)),
+		server:      "localhost:1881",
+		subscribeTo: "foo",
+		qos:         1,
+		clientID:    fmt.Sprintf("echoer-%d", rand.IntN(1000)),
 	}
 	client, msgChan, err := connect(ctx, config, slog.Default())
 	if err != nil {
@@ -181,7 +234,7 @@ func testConnect(ctx context.Context, config *config, logger *slog.Logger) (*pah
 	subPacket := &paho.Subscribe{
 		Subscriptions: []paho.SubscribeOptions{
 			{
-				Topic: config.topic,
+				Topic: config.publishTo,
 				QoS:   byte(config.qos),
 			},
 		},
@@ -191,7 +244,7 @@ func testConnect(ctx context.Context, config *config, logger *slog.Logger) (*pah
 		return nil, nil, fmt.Errorf("client.Subscribe: %w", err)
 	}
 	// not sure we need to check the subAck, but we can log it
-	logger.Debug("subscribed to response topic", "topic", config.responseTopic, "qos", config.qos, "suback", subAck)
+	logger.Debug("subscribed to response topic", "topic", config.subscribeTo, "qos", config.qos, "suback", subAck)
 
 	return client, msgChan, nil
 }

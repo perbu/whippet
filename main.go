@@ -33,16 +33,16 @@ func main() {
 }
 
 type config struct {
-	server        string
-	mdnsName      string
-	topic         string
-	responseTopic string
-	qos           int
-	retained      bool
-	clientID      string
-	username      string
-	password      string
-	timeout       time.Duration
+	server      string
+	mdnsName    string
+	publishTo   string
+	subscribeTo string
+	qos         int
+	retained    bool
+	clientID    string
+	username    string
+	password    string
+	timeout     time.Duration
 }
 
 func run(ctx context.Context, logoutput, output io.Writer, input io.Reader, args, env []string) error {
@@ -68,6 +68,7 @@ func run(ctx context.Context, logoutput, output io.Writer, input io.Reader, args
 			d := &paho.Disconnect{ReasonCode: 0}
 			_ = client.Disconnect(d)
 		}
+
 		// Just assume the rest of the application is able to shut down
 	}()
 
@@ -118,7 +119,6 @@ func run(ctx context.Context, logoutput, output io.Writer, input io.Reader, args
 
 func b64(data []byte) string {
 	return fmt.Sprintf("%x", data)
-
 }
 
 func connect(ctx context.Context, config config, logger *slog.Logger) (*paho.Client, chan *paho.Publish, error) {
@@ -166,11 +166,15 @@ func connect(ctx context.Context, config config, logger *slog.Logger) (*paho.Cli
 		return nil, nil, fmt.Errorf("connection refused: (code: %d) %s", connAck.ReasonCode, connAck.Properties.ReasonString)
 	}
 	logger.Debug("connected to server")
+	// return early if we don't need to subscribe to anything
+	if config.subscribeTo == "" {
+		return client, msgChan, nil
+	}
 	// subscribe to the response topic.
 	subPacket := &paho.Subscribe{
 		Subscriptions: []paho.SubscribeOptions{
 			{
-				Topic: config.responseTopic,
+				Topic: config.subscribeTo,
 				QoS:   byte(config.qos),
 			},
 		},
@@ -180,7 +184,7 @@ func connect(ctx context.Context, config config, logger *slog.Logger) (*paho.Cli
 		return nil, nil, fmt.Errorf("client.Subscribe: %w", err)
 	}
 	// not sure we need to check the subAck, but we can log it
-	logger.Debug("subscribed to response topic", "topic", config.responseTopic, "qos", config.qos, "suback", subAck)
+	logger.Debug("subscribed to response topic", "topic", config.subscribeTo, "qos", config.qos, "suback", subAck)
 
 	return client, msgChan, nil
 }
@@ -194,8 +198,8 @@ func getConfig(args []string) (config, error) {
 	flagset := flag.NewFlagSet("mqtt-pub", flag.ContinueOnError)
 	flagset.StringVar(&cfg.server, "server", "", "The full URL of the MQTT server to connect to")
 	flagset.StringVar(&cfg.mdnsName, "mdns", "", "The mDNS name of the MQTT server to connect to")
-	flagset.StringVar(&cfg.topic, "topic", "", "Topic to publish the messages on")
-	flagset.StringVar(&cfg.responseTopic, "response-topic", "", "Topic the other party should respond to")
+	flagset.StringVar(&cfg.publishTo, "topic", "", "Topic to publish the messages on")
+	flagset.StringVar(&cfg.subscribeTo, "response-topic", "", "Topic the other party should respond to")
 	flagset.IntVar(&cfg.qos, "qos", 1, "The QoS to send the messages at")
 	flagset.BoolVar(&cfg.retained, "retained", false, "Are the messages sent with the retained flag")
 	flagset.StringVar(&cfg.clientID, "clientID", clientID, "A clientID for the connection")
@@ -207,14 +211,14 @@ func getConfig(args []string) (config, error) {
 		return config{}, fmt.Errorf("flagset.Parse: %w", err)
 	}
 	// check for required flags:
-	if cfg.topic == "" {
+	if cfg.publishTo == "" {
 		return config{}, fmt.Errorf("missing required flag: -topic")
 	}
 	if cfg.timeout <= 0 {
 		return config{}, fmt.Errorf("timeout must be positive")
 	}
-	if cfg.responseTopic == "" {
-		cfg.responseTopic = cfg.topic
+	if cfg.subscribeTo == "" {
+		cfg.subscribeTo = cfg.publishTo
 	}
 	return cfg, nil
 }
@@ -222,14 +226,14 @@ func getConfig(args []string) (config, error) {
 func makePubPacket(config config, payload, id []byte) *paho.Publish {
 	// construct the publish packet
 	return &paho.Publish{
-		Topic:   config.topic,
+		Topic:   config.publishTo,
 		Payload: payload,
 		QoS:     byte(config.qos),
 		Retain:  config.retained,
 		Properties: &paho.PublishProperties{
 			CorrelationData:        id,
 			ContentType:            "",
-			ResponseTopic:          config.responseTopic,
+			ResponseTopic:          config.subscribeTo,
 			PayloadFormat:          nil,
 			MessageExpiry:          nil,
 			SubscriptionIdentifier: nil,
