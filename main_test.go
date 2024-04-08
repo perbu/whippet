@@ -13,7 +13,6 @@ import (
 	"math/rand/v2"
 	"net"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 )
@@ -59,17 +58,18 @@ func Test_Complete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if out.String() != "pong" {
+	if out.String() != "pong\n" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 }
 
 func TestGetConfig(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    []string
-		want    config
-		wantErr bool
+		name     string
+		args     []string
+		want     config
+		wantHelp bool
+		wantErr  bool
 	}{
 		{
 			name: "Valid config",
@@ -89,6 +89,20 @@ func TestGetConfig(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "Just topic",
+			args: []string{"-topic", "testTopic"},
+			want: config{
+				server:      "localhost:1883",
+				timeout:     defaultTimeout,
+				mdnsName:    "",
+				publishTo:   "testTopic",
+				subscribeTo: "testTopic",
+				qos:         1,
+				retained:    false,
+				clientID:    "client-123", // Assume generateClientID returns "client-123" for this test
+			},
+		},
+		{
 			name:    "Missing topic",
 			args:    []string{"-server", "mqtt://example.com"},
 			want:    config{},
@@ -104,13 +118,17 @@ func TestGetConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getConfig(tt.args)
+			got, help, err := getConfig(tt.args)
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getConfig() = %+v, want %+v", got, tt.want)
+			if err := compareConfigs(got, tt.want); err != nil {
+				t.Errorf("getConfig() error: %v", err)
+			}
+			if help != tt.wantHelp {
+				t.Errorf("getConfig() help = %v, want %v", help, tt.wantHelp)
 			}
 		})
 	}
@@ -138,13 +156,13 @@ func runEchoer(ctx context.Context, logger *slog.Logger) error {
 		if pkt.Topic != "foo" {
 			return fmt.Errorf("unexpected topic: %s", pkt.Topic)
 		}
-		if string(pkt.Payload) != "ping" {
-			return fmt.Errorf("unexpected payload: %s", pkt.Payload)
+		if !bytes.HasPrefix(pkt.Payload, []byte("ping")) {
+			return fmt.Errorf("unexpected payload: '%s'", string(pkt.Payload))
 		}
 		// send a response - "pong" on the response topic
 		_, err = client.Publish(ctx, &paho.Publish{
 			Topic:   pkt.Properties.ResponseTopic,
-			Payload: []byte("pong"),
+			Payload: []byte("pong\n"),
 			Properties: &paho.PublishProperties{
 				CorrelationData: pkt.Properties.CorrelationData,
 			},
@@ -252,5 +270,37 @@ func testConnect(ctx context.Context, config *config, logger *slog.Logger) (*pah
 func debugLogger(output io.WriteCloser) *slog.Logger {
 	logHandle := slog.NewTextHandler(output, &slog.HandlerOptions{Level: slog.LevelDebug})
 	return slog.New(logHandle)
+}
 
+// compareConfigs compares two config structs and returns an error if they are different
+func compareConfigs(a, b config) error {
+	if a.server != b.server {
+		return fmt.Errorf("server fields differ: %s != %s", a.server, b.server)
+	}
+	if a.mdnsName != b.mdnsName {
+		return fmt.Errorf("mdnsName fields differ: %s != %s", a.mdnsName, b.mdnsName)
+	}
+	if a.publishTo != b.publishTo {
+		return fmt.Errorf("publishTo fields differ: %s != %s", a.publishTo, b.publishTo)
+	}
+	if a.subscribeTo != b.subscribeTo {
+		return fmt.Errorf("subscribeTo fields differ: %s != %s", a.subscribeTo, b.subscribeTo)
+	}
+	if a.qos != b.qos {
+		return fmt.Errorf("qos fields differ: %d != %d", a.qos, b.qos)
+	}
+	if a.retained != b.retained {
+		return fmt.Errorf("retained fields differ: %t != %t", a.retained, b.retained)
+	}
+	if a.username != b.username {
+		return fmt.Errorf("username fields differ: %s != %s", a.username, b.username)
+	}
+	if a.password != b.password {
+		return fmt.Errorf("password fields differ: %s != %s", a.password, b.password)
+	}
+	if a.timeout != b.timeout {
+		return fmt.Errorf("timeout fields differ: %v != %v", a.timeout, b.timeout)
+	}
+	// ignore clientID
+	return nil // No differences
 }

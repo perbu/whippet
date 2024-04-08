@@ -6,20 +6,66 @@ Whippet is a simple command line tool for sending requests and receiving respons
 
 Typically, you'll use whippet to request something over MQTT and get a response back.
 
+## Usage
 
-## Options
+```shell
+$ echo "ping" | whippet -broker tcp://localhost:1883 -topic "my/request/topic" -qos 1
+pong
+```
 
-`-broker` - The URL of the MQTT broker.
+The message to be sent is read from `stdin` and the response is written to `stdout`. Any error messages
+are written to `stderr`.
 
-`-mdns` - The mDNS name of the MQTT broker service
+### Options
 
-`-t,--topic` - The topic to publish to. 
+# Application Help Guide
 
-`-qos` - The QoS level to use. Default: `1`
+Below are the command-line options available for the application:
 
-`-message` - The message to send. 
+- **-clientID** `string`  
+  Specifies a clientID for the connection.  
+  Default: `$hostname-$random`
 
-`-client-id` - The client ID to use. Default: `whippet`
+- **-help**  
+  Prints this help message.
 
-`-help` - Show this help message
+- **-mdns** `string`  
+  The mDNS name of the MQTT server to connect to.
 
+- **-password** `string`  
+  Password to match username.
+
+- **-qos** `int`  
+  The Quality of Service (QoS) level to send the messages at.  
+  Default: `1`
+
+- **-response-topic** `string`  
+  Topic the other party should respond to. Defaults to the publish topic.
+
+- **-retained**  
+  Specifies if the messages are sent with the retained flag.
+
+- **-server** `string`  
+  The full URL of the MQTT server to connect to.  
+  Default: `localhost:1883`
+
+- **-timeout** `duration`  
+  Timeout for the operation.  
+  Default: `10s`
+
+- **-topic** `string`  
+  Topic to publish the messages on.
+
+- **-username** `string`  
+  A username to authenticate to the MQTT server.
+
+
+### Development
+
+This is quite a simple tool and I made it to scratch my itch. If you need anything in it, 
+feel free to open an issue or a PR.
+
+The one thing I'll likely add is support for client TLS certs.
+
+Note that the tests fire up a Mochi MQTT broker on port 1883. This is why we have a dependency on
+`github.com/mochi-co/mqtt`. 

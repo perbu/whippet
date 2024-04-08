@@ -20,12 +20,13 @@ import (
 
 const (
 	correlationDataSize = 10
+	defaultTimeout      = 10 * time.Second
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	err := run(ctx, os.Stderr, os.Stdout, os.Stdin, os.Args[:1], os.Environ())
+	err := run(ctx, os.Stderr, os.Stdout, os.Stdin, os.Args[1:], os.Environ())
 	if err != nil {
 		fmt.Println("error:", err)
 		os.Exit(1)
@@ -50,9 +51,12 @@ func run(ctx context.Context, logoutput, output io.Writer, input io.Reader, args
 	defer cancel()
 	logHandle := slog.NewTextHandler(logoutput, &slog.HandlerOptions{Level: slog.LevelDebug})
 	logger := slog.New(logHandle)
-	config, err := getConfig(args)
+	config, showhelp, err := getConfig(args)
 	if err != nil {
 		return fmt.Errorf("getConfig: %w", err)
+	}
+	if showhelp {
+		return nil
 	}
 	fmt.Printf("config: %+v", config)
 	logger.Debug("config", "config", config)
@@ -189,38 +193,45 @@ func connect(ctx context.Context, config config, logger *slog.Logger) (*paho.Cli
 	return client, msgChan, nil
 }
 
-func getConfig(args []string) (config, error) {
+func getConfig(args []string) (config, bool, error) {
 	clientID, err := generateClientID()
 	if err != nil {
-		return config{}, fmt.Errorf("generateClientID: %w", err)
+		return config{}, false, fmt.Errorf("generateClientID: %w", err)
 	}
 	var cfg config
+	var help bool
 	flagset := flag.NewFlagSet("mqtt-pub", flag.ContinueOnError)
-	flagset.StringVar(&cfg.server, "server", "", "The full URL of the MQTT server to connect to")
+	flagset.StringVar(&cfg.server, "server", "localhost:1883", "The full URL of the MQTT server to connect to")
 	flagset.StringVar(&cfg.mdnsName, "mdns", "", "The mDNS name of the MQTT server to connect to")
 	flagset.StringVar(&cfg.publishTo, "topic", "", "Topic to publish the messages on")
-	flagset.StringVar(&cfg.subscribeTo, "response-topic", "", "Topic the other party should respond to")
+	flagset.StringVar(&cfg.subscribeTo, "response-topic", "", "Topic the other party should respond to. Defaults to the publish topic")
 	flagset.IntVar(&cfg.qos, "qos", 1, "The QoS to send the messages at")
 	flagset.BoolVar(&cfg.retained, "retained", false, "Are the messages sent with the retained flag")
 	flagset.StringVar(&cfg.clientID, "clientID", clientID, "A clientID for the connection")
 	flagset.StringVar(&cfg.username, "username", "", "A username to authenticate to the MQTT server")
 	flagset.StringVar(&cfg.password, "password", "", "Password to match username")
-	flagset.DurationVar(&cfg.timeout, "timeout", 10*time.Second, "Timeout for the operation")
+	flagset.DurationVar(&cfg.timeout, "timeout", defaultTimeout, "Timeout for the operation")
+	flagset.BoolVar(&help, "help", false, "Print this help message")
 	err = flagset.Parse(args)
 	if err != nil {
-		return config{}, fmt.Errorf("flagset.Parse: %w", err)
+		return config{}, false, fmt.Errorf("flagset.Parse: %w", err)
+	}
+	if help {
+		flagset.Usage()
+		return config{}, true, nil
+
 	}
 	// check for required flags:
 	if cfg.publishTo == "" {
-		return config{}, fmt.Errorf("missing required flag: -topic")
+		return config{}, false, fmt.Errorf("missing required flag: -topic")
 	}
 	if cfg.timeout <= 0 {
-		return config{}, fmt.Errorf("timeout must be positive")
+		return config{}, false, fmt.Errorf("timeout must be positive")
 	}
 	if cfg.subscribeTo == "" {
 		cfg.subscribeTo = cfg.publishTo
 	}
-	return cfg, nil
+	return cfg, false, nil
 }
 
 func makePubPacket(config config, payload, id []byte) *paho.Publish {
