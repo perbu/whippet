@@ -61,47 +61,15 @@ func run(ctx context.Context, logoutput, output io.Writer, input io.Reader, args
 		return fmt.Errorf("read: %w", err)
 	}
 
-	// make a random client id
-	randomID, err := whippet.MakeRandomID()
+	response, err := whippet.Request(runCtx, client, config, payload, msgChan, logger)
 	if err != nil {
-		return fmt.Errorf("randomBytes: %w", err)
+		return fmt.Errorf("request: %w", err)
 	}
-
-	// wait for the response
-	ctxTimeout, timeoutCancel := context.WithTimeout(runCtx, config.Timeout)
-	defer timeoutCancel()
-	pubPacket := whippet.MakePubPacket(config, payload, randomID)
-	// publish the message
-	resp, err := client.Publish(ctx, pubPacket)
+	_, err = output.Write(response)
 	if err != nil {
-		return fmt.Errorf("client.Publish: %w", err)
+		return fmt.Errorf("output.Write: %w", err)
 	}
-	if resp.ReasonCode != 0 {
-		return fmt.Errorf("publish refused: (code: %d) %s", resp.ReasonCode, resp.Properties.ReasonString)
-	}
-
-	// wait for the response or timeout
-	for {
-		select {
-		case <-ctxTimeout.Done():
-			return fmt.Errorf("timeout waiting for response")
-		case msg := <-msgChan:
-			logger.Info("received message", "topic", msg.Topic, "payload", string(msg.Payload),
-				"correlationData", b64(msg.Properties.CorrelationData),
-				"randomID", b64(randomID))
-			if bytes.Equal(msg.Properties.CorrelationData, randomID) {
-				_, err := output.Write(msg.Payload)
-				if err != nil {
-					return fmt.Errorf("output.Write: %w", err)
-				}
-				return nil
-			}
-		}
-	}
-}
-
-func b64(data []byte) string {
-	return fmt.Sprintf("%x", data)
+	return nil
 }
 
 func read(ctx context.Context, input io.Reader) ([]byte, error) {

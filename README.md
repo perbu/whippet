@@ -4,12 +4,18 @@ Whippet is a simple command line tool for sending requests and receiving respons
 
 ![Whippet](whippet-pixels.webp)
 
-Typically, you'll use whippet to request something over MQTT and get a response back.
+Typically, you'll use whippet to request something over MQTT and get a response back. Whippet will take care of 
+generating and matching up MQTT correlation IDs as well as setting the response topic for the request.
+
+Whippets secondary use case is a library for performing MQTT request/response operations. This is why a lot of the 
+logic is in the whippet package.
+
+Whippet has a wrapper around the paho MQTT client. Its use is optional, naturally.
 
 ## Usage
 
 ```shell
-$ echo "ping" | whippet -broker tcp://localhost:1883 -topic "my/request/topic" -qos 1
+$ echo "ping" | whippet -broker tcp://localhost:1883 -topic "my/topic" -qos 1
 pong
 ```
 
@@ -28,9 +34,6 @@ Below are the command-line options available for the application:
 
 - **-help**  
   Prints this help message.
-
-- **-mdns** `string`  
-  The mDNS name of the MQTT server to connect to.
 
 - **-password** `string`  
   Password to match username.
