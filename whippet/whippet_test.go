@@ -1,4 +1,4 @@
-package main
+package whippet
 
 import (
 	"bytes"
@@ -67,14 +67,14 @@ func TestGetConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		args     []string
-		want     config
+		want     Config
 		wantHelp bool
 		wantErr  bool
 	}{
 		{
-			name: "Valid config",
+			name: "Valid Config",
 			args: []string{"-server", "mqtt://example.com", "-topic", "testTopic", "-response-topic", "responseTopic", "-qos", "2", "-retained", "-clientID", "client-123", "-username", "user", "-password", "pass"},
-			want: config{
+			want: Config{
 				server:      "mqtt://example.com",
 				mdnsName:    "",
 				publishTo:   "testTopic",
@@ -84,16 +84,16 @@ func TestGetConfig(t *testing.T) {
 				clientID:    "client-123", // Assume generateClientID returns "client-123" for this test
 				username:    "user",
 				password:    "pass",
-				timeout:     10 * time.Second,
+				Timeout:     10 * time.Second,
 			},
 			wantErr: false,
 		},
 		{
 			name: "Just topic",
 			args: []string{"-topic", "testTopic"},
-			want: config{
+			want: Config{
 				server:      "localhost:1883",
-				timeout:     defaultTimeout,
+				Timeout:     defaultTimeout,
 				mdnsName:    "",
 				publishTo:   "testTopic",
 				subscribeTo: "testTopic",
@@ -105,20 +105,20 @@ func TestGetConfig(t *testing.T) {
 		{
 			name:    "Missing topic",
 			args:    []string{"-server", "mqtt://example.com"},
-			want:    config{},
+			want:    Config{},
 			wantErr: true,
 		},
 		{
 			name:    "Negative timeout",
 			args:    []string{"-server", "mqtt://example.com", "-topic", "testTopic", "-timeout", "-5s"},
-			want:    config{},
+			want:    Config{},
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, help, err := getConfig(tt.args)
+			got, help, err := GetConfig(tt.args)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -137,13 +137,13 @@ func TestGetConfig(t *testing.T) {
 // runEchoer is a simple echoer that listens for a message on the topic "foo" and responds with "pong" on the response topic.
 // The response topic is taken from the incoming message's properties.
 func runEchoer(ctx context.Context, logger *slog.Logger) error {
-	config := config{
+	config := Config{
 		server:      "localhost:1881",
 		subscribeTo: "foo",
 		qos:         1,
 		clientID:    fmt.Sprintf("echoer-%d", rand.IntN(1000)),
 	}
-	client, msgChan, err := connect(ctx, config, slog.Default())
+	client, msgChan, err := Connect(ctx, config, slog.Default())
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
@@ -203,8 +203,8 @@ func makeBroker(logger *slog.Logger) (*mqtt.Server, error) {
 	return server, nil
 }
 
-// testConnect is almost the same as connect but subscribes to "topic" instead of "responseTopic"
-func testConnect(ctx context.Context, config *config, logger *slog.Logger) (*paho.Client, chan *paho.Publish, error) {
+// testConnect is almost the same as Connect but subscribes to "topic" instead of "responseTopic"
+func testConnect(ctx context.Context, config *Config, logger *slog.Logger) (*paho.Client, chan *paho.Publish, error) {
 	conn, err := net.Dial("tcp", config.server)
 	if err != nil {
 		return nil, nil, fmt.Errorf("net.Dial: %w", err)
@@ -272,8 +272,8 @@ func debugLogger(output io.WriteCloser) *slog.Logger {
 	return slog.New(logHandle)
 }
 
-// compareConfigs compares two config structs and returns an error if they are different
-func compareConfigs(a, b config) error {
+// compareConfigs compares two Config structs and returns an error if they are different
+func compareConfigs(a, b Config) error {
 	if a.server != b.server {
 		return fmt.Errorf("server fields differ: %s != %s", a.server, b.server)
 	}
@@ -298,8 +298,8 @@ func compareConfigs(a, b config) error {
 	if a.password != b.password {
 		return fmt.Errorf("password fields differ: %s != %s", a.password, b.password)
 	}
-	if a.timeout != b.timeout {
-		return fmt.Errorf("timeout fields differ: %v != %v", a.timeout, b.timeout)
+	if a.Timeout != b.Timeout {
+		return fmt.Errorf("timeout fields differ: %v != %v", a.Timeout, b.Timeout)
 	}
 	// ignore clientID
 	return nil // No differences
