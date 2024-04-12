@@ -10,7 +10,7 @@ generating and matching up MQTT correlation IDs as well as setting the response 
 Whippets secondary use case is a library for performing MQTT request/response operations. This is why a lot of the 
 logic is in the whippet package.
 
-Whippet has a wrapper around the paho MQTT client. Its use is optional, naturally.
+Whippet has a wrapper around the paho MQTT client. Its use is optional, naturally. You can just provide your own paho client. 
 
 ## Usage
 
