@@ -15,7 +15,7 @@ Whippet has a wrapper around the paho MQTT client. Its use is optional, naturall
 ## Usage
 
 ```shell
-$ echo "ping" | whippet -broker tcp://localhost:1883 -topic "my/topic" -qos 1
+$ echo "ping" | whippet -server tcp://localhost:1883 -topic "my/topic" -qos 1
 pong
 ```
 
