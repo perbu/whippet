@@ -147,7 +147,7 @@ func GetConfig(args []string) (Config, bool, error) {
 	flagset := flag.NewFlagSet("whippet", flag.ContinueOnError)
 	flagset.StringVar(&cfg.Server, "server", "localhost:1883", "The full URL of the MQTT Server to connect to")
 	flagset.StringVar(&cfg.PublishTo, "topic", "", "Topic to publish the messages on")
-	flagset.StringVar(&cfg.SubscribeTo, "response-topic", "", "Topic the other party should respond to. Defaults to the publish topic")
+	flagset.StringVar(&cfg.SubscribeTo, "response-topic", "", "Topic the other party should respond to. Defaults to the publish topic + '/response'")
 	flagset.IntVar(&cfg.Qos, "qos", 1, "The QoS to send the messages at")
 	flagset.BoolVar(&cfg.Retained, "retained", false, "Are the messages sent with the Retained flag")
 	flagset.StringVar(&cfg.ClientID, "clientID", clientID, "A ClientID for the connection")
@@ -172,7 +172,7 @@ func GetConfig(args []string) (Config, bool, error) {
 		return Config{}, false, fmt.Errorf("timeout must be positive")
 	}
 	if cfg.SubscribeTo == "" {
-		cfg.SubscribeTo = cfg.PublishTo
+		cfg.SubscribeTo = cfg.PublishTo + "/response"
 	}
 	return cfg, false, nil
 }
