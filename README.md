@@ -43,7 +43,7 @@ Below are the command-line options available for the application:
   Default: `1`
 
 - **-response-topic** `string`  
-  Topic the other party should respond to. Defaults to the publish topic.
+  Topic the other party should respond to. Defaults to the publish topic + `/response`.
 
 - **-retained**  
   Specifies if the messages are sent with the retained flag.
